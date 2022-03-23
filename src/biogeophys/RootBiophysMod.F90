@@ -252,6 +252,7 @@ contains
     ! !LOCAL VARIABLES:
     real(r8), parameter :: m_to_cm = 1.e2_r8
     real(r8) :: beta !patch specific shape parameter
+    real(r8) :: rf !tmp rootfr
     integer :: p, lev, c
     !------------------------------------------------------------------------
 
@@ -264,9 +265,14 @@ contains
        if (.not.patch%is_fates(p)) then
           beta = pftcon%rootprof_beta(patch%itype(p),varindx)
           do lev = 1, ubj
-             rootfr(p,lev) = ( &
+             rf = ( &
                   beta ** (col%zi(c,lev-1)*m_to_cm) - &
                   beta ** (col%zi(c,lev)*m_to_cm) )
+             !if (rf > 0.01_r8) then
+             rootfr(p,lev) = rf
+             !else
+             !   rootfr(p,lev) = 0._r8
+             !end if
           end do
        else
           rootfr(p,:) = 0.

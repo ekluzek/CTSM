@@ -208,7 +208,6 @@ contains
     real(r8)           :: tkm                           ! mineral conductivity
     real(r8)           :: xksat                         ! maximum hydraulic conductivity of soil [mm/s]
     real(r8)           :: clay,sand                     ! temporaries
-    real(r8)           :: perturbed_sand                ! temporary for paramfile implementation of +/- sand percentage
     real(r8)           :: residual_clay_frac            ! temporary for paramfile implementation of +/- residual clay percentage
     real(r8)           :: perturbed_residual_clay_frac  ! temporary for paramfile implementation of +/- residual clay percentage
     integer            :: dimid                         ! dimension id
@@ -491,27 +490,30 @@ contains
              end if
 
              if (lev <= nlevsoi) then
-                ! This is separated into sections for non-perturbation and perturbation of sand/clay
-                ! because the perturbation code is not bfb when sand_pf=clay_pf=0. This occurs because
-                ! of a divide and then a multiply in the code.
-                if (params_inst%sand_pf == 0._r8 .and. params_inst%clay_pf == 0._r8) then
-                   soilstate_inst%cellsand_col(c,lev) = sand
-                   soilstate_inst%cellclay_col(c,lev) = clay
-                else
+
+                if (params_inst%sand_pf /= 0._r8 .or. params_inst%clay_pf /= 0._r8) then
                    ! by default, will read sand and clay from the surface dataset
                    !     - sand_pf can be used to perturb the absolute percent sand
                    !     - clay_pf can be used to perturb what percent of (clay+silt) is clay
+
                    if (sand<100._r8) then
                       residual_clay_frac              = clay/(100._r8-sand)
                    else
                       residual_clay_frac              = 0.5_r8
                    end if
-                   perturbed_sand                     = min(100._r8,max(0._r8,sand+params_inst%sand_pf))
+                   sand                               = min(100._r8,max(0._r8,sand+params_inst%sand_pf))
                    perturbed_residual_clay_frac       = min(1._r8,max(0._r8,residual_clay_frac + &
                                                         params_inst%clay_pf/100._r8))
-                   soilstate_inst%cellsand_col(c,lev) = perturbed_sand
-                   soilstate_inst%cellclay_col(c,lev) = (100._r8-perturbed_sand)*perturbed_residual_clay_frac
+                   clay                               = (100._r8-sand)*perturbed_residual_clay_frac 
+                   if (sand+clay<=0._r8) then
+                      sand=1._r8
+                      clay=1._r8
+                   endif
+
+                   
                 end if
+                soilstate_inst%cellsand_col(c,lev) = sand
+                soilstate_inst%cellclay_col(c,lev) = clay
                 soilstate_inst%cellorg_col(c,lev)  = om_frac*organic_max
              end if
 
