@@ -81,11 +81,19 @@
       <option name="comment">Simple test use soil eroditability in CTSM for CAM5 tuning</option>
     </options>
   </test>
+  <test name="ERP_D_Ld9" grid="f10_f10_mg37" compset="I1850Clm51BgcCrop" testmods="clm/clm51cam6LndTuningModeZDustSoilErod">
+    <machines>
+      <machine name="izumi" compiler="nag" category="aux_clm"/>
+    </machines>
+    <options>
+      <option name="wallclock">00:20:00</option>
+      <option name="comment">Make sure there is a nag test for Zender soil erod</option>
+    </options>
+  </test>
   <test name="ERP_D_Ld9" grid="ne30pg3_t232" compset="I1850Clm51BgcCrop" testmods="clm/clm51cam6LndTuningModeZDustSoilErod">
     <machines>
       <machine name="derecho" compiler="intel" category="cesm3_dev"/>
       <machine name="derecho" compiler="intel" category="aux_clm"/>
-      <machine name="izumi" compiler="nag" category="aux_clm"/>
     </machines>
     <options>
       <option name="wallclock">00:20:00</option>
