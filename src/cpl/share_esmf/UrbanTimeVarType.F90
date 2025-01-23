@@ -232,7 +232,7 @@ contains
     use clm_instur       , only : urban_valid
     use dshr_methods_mod , only : dshr_fldbun_getfldptr
     use dshr_strdata_mod , only : shr_strdata_advance
-    use shr_infnan_mod   , only : nan => shr_infnan_nan, assignment(=)
+    use shr_infnan_mod   , only : nan => shr_infnan_nan, assignment(=), isnan => shr_infnan_isnan, isinf => shr_infnan_isinf
     use UrbanParamsType  , only : urban_explicit_ac
     !
     ! !ARGUMENTS:
@@ -316,11 +316,20 @@ contains
              gindx = g
              lindx = l
              exit
-          else if (urban_explicit_ac .and. (this%p_ac(l) < 0._r8 .or. this%p_ac(l) > 1._r8)) then
+          else if (urban_explicit_ac ) then
+            if ( isnan(this%p_ac(l)) ) then
+               cycle
+            end if
+            if ( isinf(this%p_ac(l)) ) then
+               call endrun(subgrid_index=lindx, subgrid_level=subgrid_level_landunit, &
+                           msg=errmsg(sourcefile, __LINE__))
+            end if
+            if ( (this%p_ac(l) < 0._r8) .or. (this%p_ac(l) > 1._r8) ) then
              found = .true.
              gindx = g
              lindx = l
              exit
+            end if
           end if
        end if
     end do
