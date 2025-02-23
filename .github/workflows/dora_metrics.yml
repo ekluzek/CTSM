@@ -14,8 +14,9 @@ jobs:
     steps:
       - name: Dora Metrics from GitHub
         uses: stenjo/devops-metrics-action@v1
-        owner: ESCOMP
         id: dora
+        with:
+           owner: ESCOMP
         
         # Use the output from the `dora` step
       - name: Get the output rate
