@@ -1,6 +1,9 @@
 name: Calculate DevOps Metrics
 
 on:
+  push:
+    branches:
+      - dora_metrics_action
   schedule:
     - cron: '00 17 * * *'
 
@@ -9,6 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     name: Checking the dora metrics
     steps:
-      - name: DevOps Metrics from GitHub
+      - name: Dora Metrics from GitHub
         uses: stenjo/devops-metrics-action@v1
+        id: dora
+        
+        # Use the output from the `dora` step
+      - name: Get the output rate
+        run: echo "The deploy rate was ${{ steps.dora.outputs.deploy-rate }}" # Use the output from the `dora` step
+      - name: Get the lead time
+        run: echo "The lead time was ${{ steps.dora.outputs.lead-time }}" # Use the output from the `dora` step
+      - name: Get the change failure rate
+        run: echo "The change failure rate was ${{
+          steps.dora.outputs.change-failure-rate }}"
+      - name: Get the mean time to restore
+        run: echo "The mean time to restore was ${{ steps.dora.outputs.mttr }}"
         id: dora
