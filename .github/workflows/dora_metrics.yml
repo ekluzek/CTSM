@@ -26,4 +26,3 @@ jobs:
           steps.dora.outputs.change-failure-rate }}"
       - name: Get the mean time to restore
         run: echo "The mean time to restore was ${{ steps.dora.outputs.mttr }}"
-        id: dora
