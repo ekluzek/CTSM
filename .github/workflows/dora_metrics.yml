@@ -2,7 +2,7 @@ name: Calculate DevOps Metrics
 
 on:
   schedule:
-    - cron: '30 0 * * *'
+    - cron: '00 17 * * *'
 
 jobs:
   update-metrics:
