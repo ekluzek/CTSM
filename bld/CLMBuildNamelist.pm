@@ -4046,6 +4046,15 @@ sub setup_logic_dry_deposition {
   if ($opts->{'drydep'} ) {
     add_default($opts,  $nl_flags->{'inputdata_rootdir'}, $definition, $defaults, $nl, 'drydep_list');
     add_default($opts,  $nl_flags->{'inputdata_rootdir'}, $definition, $defaults, $nl, 'dep_data_file');
+
+    # Check for and remove line returns in the string, so that it will validate later
+    my $var = "drydep_list";
+    my $value =  $nl->get_value($var);
+    if ( $value =~ /\n/) {
+       $value =~ s/\n//g;
+       my $group = $definition->get_group_name($var);
+       $nl->set_variable_value($group, $var, $value);
+    }
   }
   if ( &value_is_true( $nl_flags->{'use_fates'}) && not &value_is_true( $nl_flags->{'use_fates_sp'}) ) {
      foreach my $var ( @list ) {
