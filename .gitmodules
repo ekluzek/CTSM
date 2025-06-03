@@ -28,7 +28,7 @@
 [submodule "fates"]
 path = src/fates
 #url = https://github.com/NGEET/fates
-url = https://github.com/foster/NGEET/fates
+url = https://github.com/adrifoster/fates
 #fxtag = sci.1.78.3_api.36.1.0
 fxtag = leaflevel_photo_test
 fxrequired = AlwaysRequired
