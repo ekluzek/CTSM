@@ -31,7 +31,7 @@ path = src/fates
 url = https://github.com/adrifoster/fates
 #fxtag = sci.1.78.3_api.36.1.0
 #fxtag = leaflevel_photo_test
-fxtag = fdfbb8aad9668de00629996f5dce669498356159
+fxtag = b1a0fe3211cf111b194101920a337c4f46fbcde4
 fxrequired = AlwaysRequired
 # Standard Fork to compare to with "git fleximod test" to ensure personal forks aren't committed
 fxDONOTUSEurl = https://github.com/NCAR/fates-release
