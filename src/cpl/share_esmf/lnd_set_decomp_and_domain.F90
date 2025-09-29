@@ -262,7 +262,45 @@ contains
 
     call t_stopf('lnd_set_decomp_and_domain_from_readmesh: final')
 
-    call t_stopf('lnd_set_decomp_and_domain_from_readmesh: final')
+    !===============================================================================
+    ! Internal subroutines for this subroutine
+    contains
+    !===============================================================================
+
+    subroutine from_readmesh_dealloc( rc )
+       use ESMF, only : ESMF_FieldRedistRelease, ESMF_DistGridDestroy, ESMF_FieldDestroy, ESMF_MeshDestroy
+       integer, intent(out) :: rc ! ESMF return code to indicate deallocate was successful
+
+       logical :: no_esmf_garbage = .true. ! If .true. release all ESMF data (which can be problematic if referenced again)
+
+       rc = ESMF_SUCCESS
+
+       deallocate(lndfrac_loc_input)
+       deallocate(gindex_lnd)
+       deallocate(gindex_ocn)
+       deallocate(gindex_ctsm)
+       ! Destroy or release all of the ESMF objects
+       call ESMF_FieldRedistRelease( rhandle_lnd2ctsm, noGarbage=no_esmf_garbage, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       !--------------------------------------------------------------------------
+       ! NOTE: We can't destroy the distgrid -- because it will be used later
+       ! As such we don't do the following...  EBK 08/01/2025
+       !call ESMF_DistGridDestroy( distgrid_ctsm, rc=rc)
+       !if (chkerr(rc,__LINE__,u_FILE_u)) return
+       !--------------------------------------------------------------------------
+       call ESMF_FieldDestroy( field_lnd, noGarbage=no_esmf_garbage, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       call ESMF_FieldDestroy( field_ctsm, noGarbage=no_esmf_garbage, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       call  ESMF_MeshDestroy( mesh_maskinput, noGarbage=no_esmf_garbage, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       call  ESMF_MeshDestroy( mesh_lndinput, noGarbage=no_esmf_garbage, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+
+    end subroutine from_readmesh_dealloc
+
+    !-------------------------------------------------------------------------------
+
 
   end subroutine lnd_set_decomp_and_domain_from_readmesh
 
