@@ -262,6 +262,8 @@ contains
 
     call t_stopf('lnd_set_decomp_and_domain_from_readmesh: final')
 
+    call t_stopf('lnd_set_decomp_and_domain_from_readmesh: final')
+
   end subroutine lnd_set_decomp_and_domain_from_readmesh
 
   !===============================================================================

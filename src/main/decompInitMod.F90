@@ -201,6 +201,59 @@ contains
 
        end if
     enddo
+    !---------------------------------------------------------------------
+    !
+    ! Do an MPI_SCAN to get the starting index for each processor ----
+    ! [Doing this both simplifies the code, reduces non-scalaable memory
+    ! and reduces execution time for loops that run over all gridcells
+    ! for each processor.]
+    ! (Doing the following few lines of coderemoved about 50 lines of complex code
+    !  as well as loops of size: ni*nj*nclumps, npes*nclumps, and ni*nj
+    !  that was being done on each processor)
+    !---------------------------------------------------------------------
+    call MPI_SCAN(procinfo%ncells, cell_id_offset, 1, MPI_INTEGER, &
+                  MPI_SUM, mpicom, ier)
+    if ( ier /= 0 )then
+        call endrun(msg='Error from MPI_SCAN', file=sourcefile, line=__LINE__)
+    end if
+    cell_id_offset = cell_id_offset + 1
+    write(iulog,*) 'cell_id_offset = ', cell_id_offset
+    procinfo%begg = cell_id_offset - procinfo%ncells
+    procinfo%endg = cell_id_offset - 1
+    write(iulog,*) 'procinfo: ncells, begg, endg  = ', procinfo%ncells, procinfo%begg, procinfo%endg
+    ! Temporary testing for MPI_SCAN, for just the local PE
+    !allocate(procinfo%cid(clump_pproc))
+    !cid_previous = 0
+    !begcid = minval(procinfo%cid(:))
+    !endcid = maxval(procinfo%cid(:))
+    !call assert_equal(begcid, procinfo%cid(1), &
+                      !msg='decompInit_lnd(): begcid is not the first, MPI_SCAN error')
+    !call assert_equal(endcid, procinfo%cid(clump_pproc), &
+                      !msg='decompInit_lnd(): endcid is not the last, MPI_SCAN error')
+    !write(iulog,*) ' begcid, endcid, procinfo%cid = ', begcid, endcid, procinfo%cid
+    ! End temporary testing
+
+    ! ---- Set begg and endg each clump on this processor ----
+    do lc = 1, clump_pproc
+       cid = procinfo%cid(lc)
+       clumps(cid)%ncells = clumps(cid)%ncells     ! This line will be removed
+       !write(iulog,*) 'lc, cid, clumps%ncells', lc, cid, clumps(cid)%ncells
+       if ( lc == 1 )then
+          clumps(cid)%begg = procinfo%begg
+       else
+          cid_previous = procinfo%cid(lc-1)
+          clumps(cid)%begg = clumps(cid_previous)%endg + 1
+       end if
+       clumps(cid)%endg = clumps(cid)%begg + clumps(cid)%ncells - 1
+       cid_previous = cid
+    end do
+
+    !---------------------------------------------------------------------
+    ! ------ Remove the following section when ready ------
+    ! Set gindex_global
+
+    !gdc2glo(:) = 0
+
 
     ! clumpcnt is the ending gdc index of each clump
 
@@ -266,6 +319,7 @@ contains
       subroutine decompInit_lnd_allocate( ier )
          ! Allocate the temporary and long term variables set and used in decompInit_lnd
          integer, intent(out) :: ier ! error code
+         !------------------------------------------------------------------------------
          !
          ! Long-term allocation:
          ! Arrays from decompMod are allocated here
@@ -277,8 +331,13 @@ contains
          !
          ! NOTE: nclumps, numg, and lns must be set before calling this routine!
          ! So decompInit_lnd_set_nclumps_numg_lns must be called first
+         !------------------------------------------------------------------------------
 
+         !-------------------------------------------------------------
          ! Allocate the longer term decompMod data
+         !-------------------------------------------------------------
+
+         ! allocate procinfo 
          allocate(procinfo%cid(clump_pproc), stat=ier)
          if (ier /= 0) then
             call endrun(msg='allocation error for procinfo%cid', file=sourcefile, line=__LINE__)
@@ -289,6 +348,7 @@ contains
             call endrun(msg="nclumps is NOT set before allocation", file=sourcefile, line=__LINE__)
             return
          end if
+        ! TODO: This will be moved to the other allocate and for a smaller size ----
          allocate(clumps(nclumps), stat=ier)
          if (ier /= 0) then
             write(iulog,*) 'allocation error for clumps: nclumps, ier=', nclumps, ier
@@ -296,17 +356,13 @@ contains
             return
          end if
 
+         !-------------------------------------------------------------
+         ! Temporary arrays that are just used in decompInit_lnd
+         !-------------------------------------------------------------
          if ( numg < 1 )then
             call endrun(msg="numg is NOT set before allocation", file=sourcefile, line=__LINE__)
             return
          end if
-         allocate(gdc2glo(numg), stat=ier)
-         if (ier /= 0) then
-            call endrun(msg="allocation error for gdc2glo", file=sourcefile, line=__LINE__)
-            return
-         end if
-
-         ! Temporary arrays that are just used in decompInit_lnd
          if ( lns < 1 )then
             call endrun(msg="lns is NOT set before allocation", file=sourcefile, line=__LINE__)
             return
@@ -316,11 +372,20 @@ contains
             call endrun(msg="allocation error for lcid", file=sourcefile, line=__LINE__)
             return
          end if
-         allocate(clumpcnt(nclumps),stat=ier)
-         if (ier /= 0) then
-            call endrun(msg="allocation error for clumpcnt", file=sourcefile, line=__LINE__)
-            return
-         end if
+         !---------------------------------------------------------------------
+         ! ---- Section to remove when ready ----
+         !allocate(gdc2glo(numg), stat=ier)
+         !if (ier /= 0) then
+         !   call endrun(msg="allocation error for gdc2glo", file=sourcefile, line=__LINE__)
+         !   return
+         !end if
+         !allocate(clumpcnt(nclumps),stat=ier)
+         !if (ier /= 0) then
+         !   call endrun(msg="allocation error for clumpcnt", file=sourcefile, line=__LINE__)
+         !   return
+         !end if
+         ! --- Remove to here -----------------
+         !---------------------------------------------------------------------
 
       end subroutine decompInit_lnd_allocate
 
@@ -342,15 +407,22 @@ contains
             call endrun(msg="allocation error for gindex_global", file=sourcefile, line=__LINE__)
             return
          end if
+         ! TODO: Remove the data, and only use the subroutine to calculate when needed
+         allocate(procinfo%ggidx(procinfo%begg:procinfo%endg), stat=ier)
+         if (ier /= 0) then
+            call endrun(msg="allocation error for gindex_global", file=sourcefile, line=__LINE__)
+            return
+         end if
       end subroutine decompInit_lnd_gindex_global_allocate
 
       !------------------------------------------------------------------------------
 
       subroutine decompInit_lnd_clean()
          ! Deallocate the temporary variables used in decompInit_lnd
-         deallocate(clumpcnt)
-         deallocate(gdc2glo)
-         !deallocate(lcid)
+         !deallocate(clumpcnt)
+         !deallocate(gdc2glo)
+         !--- NOTE: Can only deallocate lcid after decompInit_clumps ----
+         ! TODO: Move the deallocate for lcid to here, after decompInit_clumps only calculates the local taskj
       end subroutine decompInit_lnd_clean
 
       !------------------------------------------------------------------------------
