@@ -392,7 +392,20 @@ contains
          if (ier /= 0) then
             call endrun(msg="allocation error for gindex_global", file=sourcefile, line=__LINE__)
             return
-         end if
+         endif
+         procinfo%ggidx(:) = -1
+         allocate(procinfo%gi(procinfo%begg:procinfo%endg), stat=ier)
+         if (ier /= 0) then
+            call endrun(msg='allocation error for procinfo%gi', file=sourcefile, line=__LINE__)
+            return
+         endif
+         procinfo%gi(:) = -1
+         allocate(procinfo%gj(procinfo%begg:procinfo%endg), stat=ier)
+         if (ier /= 0) then
+            call endrun(msg='allocation error for procinfo%gj', file=sourcefile, line=__LINE__)
+            return
+         endif
+         procinfo%gj(:) = -1
       end subroutine decompInit_lnd_gindex_global_allocate
 
       !------------------------------------------------------------------------------
