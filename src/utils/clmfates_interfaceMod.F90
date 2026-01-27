@@ -49,6 +49,7 @@ module CLMFatesInterfaceMod
    use PRTGenericMod     , only : prt_cnp_flex_allom_hyp
    use clm_varctl        , only : use_fates
    use clm_varctl        , only : fates_spitfire_mode
+   use clm_varctl        , only : use_fates_managed_fire
    use clm_varctl        , only : use_fates_tree_damage
    use clm_varctl        , only : use_fates_planthydro
    use clm_varctl        , only : use_fates_cohort_age_tracking
@@ -79,6 +80,7 @@ module CLMFatesInterfaceMod
    use clm_varctl        , only : use_lch4
    use clm_varctl        , only : fates_history_dimlevel
    use clm_varctl        , only : nsrest, nsrBranch
+   use clm_varctl        , only : Allocate_Carbon_only
    use clm_varcon        , only : tfrz
    use clm_varcon        , only : spval
    use clm_varcon        , only : denice
@@ -428,6 +430,7 @@ module CLMFatesInterfaceMod
      integer                                        :: pass_hydro_solver
      integer                                        :: pass_radiation_model
      integer                                        :: pass_electron_transport_model
+     integer                                        :: pass_managed_fire
 
      call t_startf('fates_globals2')
 
@@ -472,28 +475,21 @@ module CLMFatesInterfaceMod
         end if
         call set_fates_ctrlparms('use_tree_damage',ival=pass_tree_damage)
         
-        ! These may be in a non-limiting status (ie when supplements)
-        ! are added, but they are always allocated and cycled non-the less
-        ! FATES may want to interact differently with other models
-        ! that don't even have these arrays allocated.
-        ! FATES also checks that if NO3 is cycled in ELM, then
-        ! any plant affinity parameters are checked.
-
-        if(use_nitrif_denitrif) then
-           call set_fates_ctrlparms('nitrogen_spec',ival=1)
-        else
-           call set_fates_ctrlparms('nitrogen_spec',ival=2)
-        end if
-
-        ! Phosphorus is not tracked in CLM
-        call set_fates_ctrlparms('phosphorus_spec',ival=0)
-
-
+        ! Pass spitfire mode values
         call set_fates_ctrlparms('spitfire_mode',ival=fates_spitfire_mode)
         call set_fates_ctrlparms('sf_nofire_def',ival=no_fire)
         call set_fates_ctrlparms('sf_scalar_lightning_def',ival=scalar_lightning)
         call set_fates_ctrlparms('sf_successful_ignitions_def',ival=successful_ignitions)
         call set_fates_ctrlparms('sf_anthro_ignitions_def',ival=anthro_ignitions)
+
+        ! Pass managed fire mode value
+        if (use_fates_managed_fire) then
+           pass_managed_fire = 1
+        else
+           pass_managed_fire = 0
+        end if
+        call set_fates_ctrlparms('use_managed_fire',ival=pass_managed_fire)
+
 
         ! This has no variable on the FATES side yet (RGK)
         !call set_fates_ctrlparms('sf_anthro_suppression_def',ival=anthro_suppression)
@@ -612,9 +608,9 @@ module CLMFatesInterfaceMod
         call set_fates_ctrlparms('radiation_model',ival=pass_radiation_model)
 
         if (trim(fates_electron_transport_model) == 'FvCB1980') then
-           pass_radiation_model = 1
+           pass_electron_transport_model = 1
         else if (trim(fates_electron_transport_model) == 'JohnsonBerry2021') then
-           pass_radiation_model = 2
+           pass_electron_transport_model = 2
         end if
         call set_fates_ctrlparms('electron_transport_model',ival=pass_electron_transport_model)
 
@@ -1021,15 +1017,17 @@ module CLMFatesInterfaceMod
          end if
 
 
-         ! Set patch itypes on natural veg columns to nonsense
-         ! This will force a crash if the model outside of FATES tries to think
-         ! of the patch as a PFT.
+         ! Set patch itypes on natural veg columns to a nonsense value. itype
+         ! associates a patch with a specific pft, which is fundamentally
+         ! inconsistent with fates and should never be used on a fates patch.
+         ! This will force a crash if the model outside tries to associate
+         ! a fates designated patch as a PFT.
 
          do s = 1, this%fates(nc)%nsites
             c = this%f2hmap(nc)%fcolumn(s)
             pi = col%patchi(c)+1
             pf = col%patchf(c)
-!            patch%itype(pi:pf) = ispval
+            patch%itype(pi:pf) = ispval
             patch%is_fates(pi:pf) = .true.
          end do
 
@@ -1147,6 +1145,12 @@ module CLMFatesInterfaceMod
       real(r8) :: s_node, smp_node         ! local for relative water content and potential
       logical  :: after_start_of_harvest_ts
       integer  :: iharv
+      logical  :: nitr_suppl                     ! true -> CLM is supplementing Nitrogen
+      logical, parameter :: phos_dummy_suppl = .true.    ! true -> Phosphorus is NOT limited (i.e. supplemented)
+                                                         ! This argument is needed for FATES
+                                                         ! to specify if phosphorus is being
+                                                         ! supplemented, Phosphorous is not limited in CLM
+                                                         ! so we set it to TRUE
       !-----------------------------------------------------------------------
 
       ! ---------------------------------------------------------------------------------
@@ -1271,10 +1275,10 @@ module CLMFatesInterfaceMod
            do ft = surfpft_lb,surfpft_ub
                ! here we are mapping from P space in the HLM to FT space in the sp_input arrays.
                p = ft + col%patchi(c) ! for an FT of 1 we want to use
-               this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_patch(p)
-               this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_patch(p)
-               this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_patch(p)
-               if(canopystate_inst%htop_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
+               this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_input_patch(p)
+               this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_input_patch(p)
+               this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_input_patch(p)
+               if(canopystate_inst%htop_input_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
                  this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = 0.01_r8
                endif
            end do ! p
@@ -1328,10 +1332,16 @@ module CLMFatesInterfaceMod
 
       end do
 
+      if(Allocate_Carbon_only())then
+         nitr_suppl = .true.
+      else
+         nitr_suppl = .false.
+      end if
+      
       ! Nutrient uptake fluxes have been accumulating with each short
       ! timestep, here, we unload them from the boundary condition
       ! structures into the cohort structures.
-      call UnPackNutrientAquisitionBCs(this%fates(nc)%sites, this%fates(nc)%bc_in)
+      call UnPackNutrientAquisitionBCs(this%fates(nc)%sites, this%fates(nc)%bc_in, nitr_suppl, phos_dummy_suppl)
 
       ! Distribute any seeds from neighboring gridcells into the current gridcell
       ! Global seed availability array populated by WrapGlobalSeedDispersal call
@@ -1686,16 +1696,10 @@ module CLMFatesInterfaceMod
           elai(col%patchi(c):col%patchf(c)) = 0.0_r8
           esai(col%patchi(c):col%patchf(c)) = 0.0_r8
           hbot(col%patchi(c):col%patchf(c)) = 0.0_r8
-
-          if(use_fates_sp)then
-            canopystate_inst%tlai_hist_patch(col%patchi(c):col%patchf(c)) = 0.0_r8
-            canopystate_inst%tsai_hist_patch(col%patchi(c):col%patchf(c)) = 0.0_r8
-            canopystate_inst%htop_hist_patch(col%patchi(c):col%patchf(c)) = 0.0_r8
-          else
-            tlai(col%patchi(c):col%patchf(c)) = 0.0_r8
-            tsai(col%patchi(c):col%patchf(c)) = 0.0_r8
-            htop(col%patchi(c):col%patchf(c)) = 0.0_r8
-          endif
+          
+          tlai(col%patchi(c):col%patchf(c)) = 0.0_r8
+          tsai(col%patchi(c):col%patchf(c)) = 0.0_r8
+          htop(col%patchi(c):col%patchf(c)) = 0.0_r8
 
           ! FATES does not dictate bare-ground so turbulent
           ! variables are not over-written.
@@ -1740,17 +1744,11 @@ module CLMFatesInterfaceMod
              esai(p) = this%fates(nc)%bc_out(s)%esai_pa(ifp)
              hbot(p) = this%fates(nc)%bc_out(s)%hbot_pa(ifp)
 
-             if(use_fates_sp)then
-               canopystate_inst%tlai_hist_patch(p) = this%fates(nc)%bc_out(s)%tlai_pa(ifp)
-               canopystate_inst%tsai_hist_patch(p) = this%fates(nc)%bc_out(s)%tsai_pa(ifp)
-               canopystate_inst%htop_hist_patch(p) = this%fates(nc)%bc_out(s)%htop_pa(ifp)
-             else
-               tlai(p) = this%fates(nc)%bc_out(s)%tlai_pa(ifp)
-               tsai(p) = this%fates(nc)%bc_out(s)%tsai_pa(ifp)
-               htop(p) = this%fates(nc)%bc_out(s)%htop_pa(ifp)
-             endif
-
-             if(use_fates_sp.and.abs(canopystate_inst%tlai_hist_patch(p) - &
+             tlai(p) = this%fates(nc)%bc_out(s)%tlai_pa(ifp)
+             tsai(p) = this%fates(nc)%bc_out(s)%tsai_pa(ifp)
+             htop(p) = this%fates(nc)%bc_out(s)%htop_pa(ifp)
+             
+             if(use_fates_sp.and.abs(tlai(p) - &
                                  this%fates(nc)%bc_out(s)%tlai_pa(ifp)).gt.1e-09)then
                write(iulog,*) 'fates lai not like hlm lai',tlai(p),this%fates(nc)%bc_out(s)%tlai_pa(ifp),ifp
              endif
@@ -2045,10 +2043,10 @@ module CLMFatesInterfaceMod
                      do ft = surfpft_lb,surfpft_ub  !set of pfts in HLM
                         ! here we are mapping from P space in the HLM to FT space in the sp_input arrays.
                         p = ft + col%patchi(c) ! for an FT of 1 we want to use
-                        this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_patch(p)
-                        this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_patch(p)
-                        this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_patch(p)
-                        if(canopystate_inst%htop_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
+                        this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_input_patch(p)
+                        this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_input_patch(p)
+                        this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_input_patch(p)
+                        if(canopystate_inst%htop_input_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
                            this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = 0.01_r8
                         endif
                      end do ! p
@@ -2200,10 +2198,10 @@ module CLMFatesInterfaceMod
                   do ft = surfpft_lb,surfpft_ub
                      ! here we are mapping from P space in the HLM to FT space in the sp_input arrays.
                      p = ft + col%patchi(c) ! for an FT of 1 we want to use
-                     this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_patch(p)
-                     this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_patch(p)
-                     this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_patch(p)
-                     if(canopystate_inst%htop_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
+                     this%fates(nc)%bc_in(s)%hlm_sp_tlai(ft) = canopystate_inst%tlai_input_patch(p)
+                     this%fates(nc)%bc_in(s)%hlm_sp_tsai(ft) = canopystate_inst%tsai_input_patch(p)
+                     this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = canopystate_inst%htop_input_patch(p)
+                     if(canopystate_inst%htop_input_patch(p).lt.1.0e-20)then ! zero htop causes inifinite/nans. This is
                         this%fates(nc)%bc_in(s)%hlm_sp_htop(ft) = 0.01_r8
                      endif
                   end do ! p
@@ -2356,11 +2354,11 @@ module CLMFatesInterfaceMod
 
      call t_startf('fates_wrapsunfrac')
 
-      associate( forc_solad => atm2lnd_inst%forc_solad_not_downscaled_grc, &
-                 forc_solai => atm2lnd_inst%forc_solai_grc, &
-                 fsun       => canopystate_inst%fsun_patch, &
-                 laisun     => canopystate_inst%laisun_patch, &
-                 laisha     => canopystate_inst%laisha_patch )
+     associate( forc_solad_g => atm2lnd_inst%forc_solad_not_downscaled_grc, &
+                forc_solai_g => atm2lnd_inst%forc_solai_grc, &
+                fsun       => canopystate_inst%fsun_patch, &
+                laisun     => canopystate_inst%laisun_patch, &
+                laisha     => canopystate_inst%laisha_patch )
 
         ! -------------------------------------------------------------------------------
         ! Convert input BC's
@@ -2372,8 +2370,8 @@ module CLMFatesInterfaceMod
            g = col%gridcell(c)
 
            do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
-              this%fates(nc)%bc_in(s)%solad_parb(ifp,:) = forc_solad(g,:)
-              this%fates(nc)%bc_in(s)%solai_parb(ifp,:) = forc_solai(g,:)
+              this%fates(nc)%bc_in(s)%solad_parb(ifp,:) = forc_solad_g(g,:)
+              this%fates(nc)%bc_in(s)%solai_parb(ifp,:) = forc_solai_g(g,:)
            end do
         end do
 
@@ -2846,28 +2844,31 @@ module CLMFatesInterfaceMod
  
  ! ======================================================================================
 
- subroutine wrap_canopy_radiation(this, bounds_clump, nc, &
-         num_vegsol, filter_vegsol, coszen, fcansno,  surfalb_inst)
+ subroutine wrap_canopy_radiation(this, bounds_clump, nc, fcansno, surfalb_inst)
 
 
+    ! Pass boundary conditions (zenith angle, ground albedo and snow-cover)
+    ! to FATES, and have fates call normalized radiation scattering.
+    ! These methods are normalized because it is the zenith of the next
+    ! timestep, and because of atmospheric model coupling, we need to provide
+    ! an albedo. This normalized solution will be scaled by the actual
+    ! downwelling radiation during the wrap sunshade fraction call
+
+   
     ! Arguments
     class(hlm_fates_interface_type), intent(inout) :: this
     type(bounds_type),  intent(in)             :: bounds_clump
-    ! filter for vegetated pfts with coszen>0
     integer            , intent(in)            :: nc ! clump index
-    integer            , intent(in)            :: num_vegsol
-    integer            , intent(in)            :: filter_vegsol(num_vegsol)
-    ! cosine solar zenith angle for next time step
-    real(r8)           , intent(in)            :: coszen( bounds_clump%begp: )
     real(r8)           , intent(in)            :: fcansno( bounds_clump%begp: )
     type(surfalb_type) , intent(inout)         :: surfalb_inst
-
+    
     ! locals
-    integer                                    :: s,c,p,ifp,icp
+    integer                                    :: s,c,p,ifp,g
 
     call t_startf('fates_wrapcanopyradiation')
 
     associate(&
+         coszen_col   =>    surfalb_inst%coszen_col         , & !in
          albgrd_col   =>    surfalb_inst%albgrd_col         , & !in
          albgri_col   =>    surfalb_inst%albgri_col         , & !in
          albd         =>    surfalb_inst%albd_patch         , & !out
@@ -2878,49 +2879,54 @@ module CLMFatesInterfaceMod
          ftid         =>    surfalb_inst%ftid_patch         , & !out
          ftii         =>    surfalb_inst%ftii_patch)            !out
 
+
     do s = 1, this%fates(nc)%nsites
 
        c = this%f2hmap(nc)%fcolumn(s)
+       g = col%gridcell(c)
 
-         do ifp = 1,this%fates(nc)%sites(s)%youngest_patch%patchno
-           p = ifp+col%patchi(c)
+       this%fates(nc)%bc_in(s)%coszen = coszen_col(c)
 
-          if( any(filter_vegsol==p) )then
+       ! FATES only does short-wave radiation scattering when
+       ! the zenith angle is positive. In the future, FATES
+       ! may perform calculations on diffuse radiation during
+       ! dawn and dusk when the sun is below the horizon, but not yet
 
-             this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) = .true.
-             this%fates(nc)%bc_in(s)%coszen_pa(ifp)  = coszen(p)
-             this%fates(nc)%bc_in(s)%fcansno_pa(ifp)  = fcansno(p)
-             this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = albgrd_col(c,:)
-             this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = albgri_col(c,:)
-
-          else
-
-             this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) = .false.
-
-          end if
-
+       do ifp = 1,this%fates(nc)%sites(s)%youngest_patch%patchno
+          p = ifp+col%patchi(c)
+          this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = fcansno(p)
        end do
+
+       
+       if(coszen_col(c) > 0._r8) then
+
+          this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = albgrd_col(c,:)
+          this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = albgri_col(c,:)
+       else
+
+          ! This will ensure a crash in FATES if it tries
+          this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = spval
+          this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = spval
+          
+       end if
+
     end do
 
-    call FatesNormalizedCanopyRadiation(this%fates(nc)%nsites,  &
-         this%fates(nc)%sites, &
-         this%fates(nc)%bc_in,  &
-         this%fates(nc)%bc_out)
+    call FatesNormalizedCanopyRadiation( &
+            this%fates(nc)%sites, &
+            this%fates(nc)%bc_in,  &
+            this%fates(nc)%bc_out)
 
     ! Pass FATES BC's back to HLM
     ! -----------------------------------------------------------------------------------
-    do icp = 1,num_vegsol
-       p = filter_vegsol(icp)
-       c = patch%column(p)
-       s = this%f2hmap(nc)%hsites(c)
-       ! do if structure here and only pass natveg columns
-       ifp = p-col%patchi(c)
+    do s = 1, this%fates(nc)%nsites
 
-       if(.not.this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) )then
-          write(iulog,*) 's,p,ifp',s,p,ifp
-          write(iulog,*) 'Not all patches on the natveg column were passed to canrad',patch%sp_pftorder_index(p)
-!          call endrun(msg=errMsg(sourcefile, __LINE__))
-       else
+       c = this%f2hmap(nc)%fcolumn(s)
+       
+       do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
+          
+          p = ifp+col%patchi(c)
+
           albd(p,:) = this%fates(nc)%bc_out(s)%albd_parb(ifp,:)
           albi(p,:) = this%fates(nc)%bc_out(s)%albi_parb(ifp,:)
           fabd(p,:) = this%fates(nc)%bc_out(s)%fabd_parb(ifp,:)
@@ -2928,9 +2934,10 @@ module CLMFatesInterfaceMod
           ftdd(p,:) = this%fates(nc)%bc_out(s)%ftdd_parb(ifp,:)
           ftid(p,:) = this%fates(nc)%bc_out(s)%ftid_parb(ifp,:)
           ftii(p,:) = this%fates(nc)%bc_out(s)%ftii_parb(ifp,:)
-       end if
+          
+       end do
     end do
-
+          
   end associate
 
   call t_stopf('fates_wrapcanopyradiation')
@@ -3232,7 +3239,8 @@ module CLMFatesInterfaceMod
 
     call t_startf('fates_init2')
 
-    call this%fates_fire_data_method%FireInit(bounds, NLFilename)
+    call this%fates_fire_data_method%FireInit(bounds)
+    call this%fates_fire_data_method%FireReadNML(bounds, NLFilename)
 
     call t_stopf('fates_init2')
 
