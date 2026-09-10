@@ -34,8 +34,9 @@ the list of common problems to watch out for
 - [ ] I have followed the [CTSM contribution guidelines](https://github.com/ESCOMP/CTSM/blob/master/CONTRIBUTING.md).
 <!-- Delete all list items below if this PR is purely Tech Note and/or User's Guide updates -->
 - [ ] The code in this PR branch builds with no errors.
-- [ ] The code in this PR branch runs with no errors. **Briefly describe tested configuration(s):**
+- [ ] The code in this PR branch runs with no errors. **Describe tested configuration(s) in above section on testing:**
 - [ ] This either (a) does not change answers, (b) it only changes answers at roundoff level, or (c) A scientific evaluation of the answer changes has been done. **Which?:**
 <!-- If (c) above, include your analyses in the "Description of changes" section. -->
 - [ ] I have reviewed relevant parts of the CLM documentation [Tech Note](https://escomp.github.io/CTSM/tech_note/index.html) or [User's Guide](https://escomp.github.io/CTSM/users_guide/index.html) to determine if anything needs to be changed or added. **If it does, describe:**
 - [ ] This PR either (a) does not create a need to update the documentation or (b) includes required documentation updates (see [guidelines for contributing documentation](https://escomp.github.io/CTSM/users_guide/working-with-documentation/docs-intro.html#contribution-guidelines)). **Which?:**
+<!-- NOTE: Delete this one and others above if this is a documentation only PR -->
